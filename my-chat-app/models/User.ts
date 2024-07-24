@@ -1,10 +1,13 @@
-import mongoose from "mongoose";
+import mongoose, { Document, Model, Schema } from 'mongoose';
 
-// 사용자 스키마 정의
-const UserSchema = new mongoose.Schema({
-  // 사용자 이름
+interface IUser extends Document {
+  username: string;
+}
+
+const userSchema: Schema<IUser> = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
 });
 
-// 사용자 모델 생성 또는 기존 모델 사용
-export const User = mongoose.models.User || mongoose.model('User', UserSchema);
+const User: Model<IUser> = mongoose.models.User || mongoose.model<IUser>('User', userSchema);
+
+export default User;

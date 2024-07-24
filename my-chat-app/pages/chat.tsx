@@ -1,111 +1,64 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
+import useSocket from '../hooks/useSocket';
+import useUserStore from '../store/useUserStore';
 import { useRouter } from 'next/router';
-import io from 'socket.io-client';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
-import axios from 'axios';
-import useStore from '../store/useStore';
-import useChatStore from '../store/useChatStore';
 
-const socket = io();
-
-const fetchMessages = async (chatId: string) => {
-  const { data } = await axios.get(`/api/messages?chatId=${chatId}`);
-  return data;
+type Message = {
+  room: string;
+  username: string;
+  message: string;
 };
 
-const sendMessageToDB = async (message: { content: string; sender: string; receiver: string }) => {
-  console.log("Sending message to DB:", message);  // 디버깅 로그 추가
-  await axios.post('/api/messages', message);
-};
-
-export default function Chat() {
+const ChatPage = () => {
+  const username = useUserStore((state) => state.username);
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
   const router = useRouter();
-  const { username, chatId } = router.query;
-  const [inputValue, setInputValue] = useState('');
-  const { messages, addMessage, setMessages } = useStore();
-  const queryClient = useQueryClient();
-  const { chats } = useChatStore();
+  const room = 'random-chat-room'; // 모든 사용자가 참여할 방 이름
+  const socket = useSocket(room);
 
   useEffect(() => {
-    console.log("Username:", username);  // 디버깅 로그 추가
-    console.log("ChatId:", chatId);  // 디버깅 로그 추가
-    console.log("Chats:", chats);  // 디버깅 로그 추가
-  }, [username, chatId, chats]);
+    if (!username) {
+      router.push('/');
+    } else {
+      console.log(`Username: ${username}, joining room: ${room}`);
+      socket.on('message', (msg: Message) => {
+        console.log(`Message received: ${msg.message} from ${msg.username} in room ${msg.room}`);
+        setMessages((prev) => [...prev, msg]);
+      });
 
-  const chat = chats.find((chat) => chat._id === chatId);
-
-  const { data, isLoading } = useQuery(
-    ['messages', chatId],
-    () => fetchMessages(chatId as string),
-    {
-      enabled: !!chatId,
-      onSuccess: (data) => {
-        setMessages(data);
-      },
+      return () => {
+        socket.off('message');
+      };
     }
-  );
+  }, [username, socket, router]);
 
-  const mutation = useMutation(sendMessageToDB, {
-    onSuccess: () => {
-      queryClient.invalidateQueries(['messages', chatId]);
-    },
-  });
-
-  useEffect(() => {
-    if (username && chatId) {
-      socket.emit('joinRoom', { sender: username, receiver: chatId });
-    }
-
-    socket.on('receiveMessage', (message) => {
-      addMessage(message);
-    });
-
-    return () => {
-      socket.off('receiveMessage');
-    };
-  }, [username, chatId]);
-
-  const handleSendMessage = () => {
-    if (!inputValue.trim()) return;
-
-    if (!chat) {
-      console.error('Chat not found');
-      return;
-    }
-
-    const otherUser = chat.users.find((user) => user.username !== username);
-    if (!otherUser) {
-      console.error('Other user not found');
-      return;
-    }
-
-    const message = { content: inputValue, sender: username as string, receiver: otherUser._id };
-    console.log("Sending message:", message);  // 디버깅 로그 추가
-    socket.emit('sendMessage', message);
-    mutation.mutate(message);
-    setInputValue('');
+  const sendMessage = () => {
+    const msg: Message = { room, username, message };
+    console.log(`Sending message: ${message}`);
+    socket.emit('message', msg);
+    setMessage('');
   };
-
-  if (isLoading) return <div>Loading...</div>;
 
   return (
     <div>
-      <h1>Chat with {chat?.users.map((user) => user.username).join(', ')}</h1>
-      <div style={{ maxHeight: '400px', overflowY: 'scroll' }}>
-        {messages.map((message, index) => (
+      <h1>채팅</h1>
+      <div>
+        {messages.map((msg, index) => (
           <div key={index}>
-            <b>{message.sender}:</b> {message.content}
+            <strong>{msg.username}: </strong> {msg.message}
           </div>
         ))}
       </div>
-      <input
-        type="text"
-        value={inputValue}
-        onChange={(e) => setInputValue(e.target.value)}
-        onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-        placeholder="Type a message..."
+      <input 
+        type="text" 
+        value={message} 
+        onChange={(e) => setMessage(e.target.value)} 
+        placeholder="메시지 입력" 
       />
-      <button onClick={handleSendMessage}>Send Message</button>
+      <button onClick={sendMessage}>전송</button>
     </div>
   );
-}
+};
+
+export default ChatPage;
