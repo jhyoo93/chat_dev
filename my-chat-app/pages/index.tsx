@@ -1,29 +1,55 @@
-import { useState } from 'react';
-import useUserStore from '../store/useUserStore';
+import { useEffect } from 'react';
+import { getSession, signIn, signOut, useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 
-const LoginPage = () => {
-  const [username, setUsernameInput] = useState('');
-  const setUsername = useUserStore((state) => state.setUsername);
+const Home = () => {
+  const { data: session, status } = useSession();
   const router = useRouter();
 
-  const handleLogin = () => {
-    setUsername(username);
-    router.push('/chat');
-  };
+  useEffect(() => {
+    if (status === 'loading') return; // 로딩 중에는 아무것도 하지 않음
+    if (!session) router.push('/api/auth/signin'); // 인증되지 않은 경우 리디렉션
+    else router.push('/chat'); // 인증된 경우 채팅 페이지로 리디렉션
+  }, [session, status, router]);
+
+  if (status === 'loading') {
+    return <div>로딩 중...</div>;
+  }
 
   return (
     <div>
-      <h1>로그인</h1>
-      <input 
-        type="text" 
-        value={username} 
-        onChange={(e) => setUsernameInput(e.target.value)} 
-        placeholder="사용자 이름" 
-      />
-      <button onClick={handleLogin}>로그인</button>
+      {!session ? (
+        <>
+          <h1>채팅 앱에 오신 것을 환영합니다</h1>
+          <p>계속하려면 로그인하세요.</p>
+          <button onClick={() => signIn()}>로그인</button>
+        </>
+      ) : (
+        <>
+          <h1>환영합니다, {session.user.name}님</h1>
+          <p>채팅 페이지로 리디렉션 중...</p>
+          <button onClick={() => signOut()}>로그아웃</button>
+        </>
+      )}
     </div>
-  )  
+  );
 };
 
-export default LoginPage;
+export async function getServerSideProps(context: any) {
+  const session = await getSession(context);
+
+  if (!session) {
+    return {
+      redirect: {
+        destination: '/api/auth/signin',
+        permanent: false,
+      },
+    };
+  }
+
+  return {
+    props: { session },
+  };
+}
+
+export default Home;

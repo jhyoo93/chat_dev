@@ -1,45 +1,26 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import { Server as SocketIOServer } from 'socket.io';
-import { Server as HTTPServer } from 'http';
-import { Socket } from 'net';
+import { Server } from 'socket.io';
 
-type NextApiResponseWithSocket = NextApiResponse & {
-  socket: Socket & {
-    server: HTTPServer & {
-      io?: SocketIOServer;
-    };
-  };
-};
-
-const ioHandler = (req: NextApiRequest, res: NextApiResponseWithSocket) => {
-  if (!res.socket?.server.io) {
-    console.log('Setting up Socket.IO server...');
-    const httpServer: HTTPServer & { io?: SocketIOServer } = res.socket.server;
-    const io = new SocketIOServer(httpServer, {
-      path: '/api/socket.io',
-    });
-    res.socket.server.io = io;
+const ioHandler = (req, res) => {
+  if (!res.socket.server.io) {
+    const io = new Server(res.socket.server);
 
     io.on('connection', (socket) => {
-      console.log('A new client connected');
-
-      socket.on('join', (room) => {
-        socket.join(room);
-        console.log(`Client joined room ${room}`);
-      });
+      console.log('New client connected');
 
       socket.on('message', (msg) => {
-        console.log(`Received message: ${msg.message} from ${msg.username} in room ${msg.room}`);
-        io.to(msg.room).emit('message', msg);
+        io.emit('message', msg); // 메시지를 모든 클라이언트에게 브로드캐스트
       });
 
       socket.on('disconnect', () => {
         console.log('Client disconnected');
       });
     });
+
+    res.socket.server.io = io;
   } else {
-    console.log('Socket.IO server already set up');
+    console.log('Socket.io server already running');
   }
+
   res.end();
 };
 
