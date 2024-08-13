@@ -13,6 +13,7 @@ function App() {
 
   // 채팅 서버 접속 종료 시 연결 상태를 업데이트
   const disconnectToChatServer = () => {
+    confirm('채팅방을 나가시겠습니까?');
     setIsConnected(false);
   };
 
